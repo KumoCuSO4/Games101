@@ -11,8 +11,10 @@ Eigen::Matrix4f get_view_matrix(Eigen::Vector3f eye_pos)
     Eigen::Matrix4f view = Eigen::Matrix4f::Identity();
 
     Eigen::Matrix4f translate;
-    translate << 1, 0, 0, -eye_pos[0], 0, 1, 0, -eye_pos[1], 0, 0, 1,
-        -eye_pos[2], 0, 0, 0, 1;
+    translate << 1, 0, 0, -eye_pos[0],
+                 0, 1, 0, -eye_pos[1], 
+                 0, 0, 1, -eye_pos[2], 
+                 0, 0, 0, 1;
 
     view = translate * view;
 
@@ -26,7 +28,12 @@ Eigen::Matrix4f get_model_matrix(float rotation_angle)
     // TODO: Implement this function
     // Create the model matrix for rotating the triangle around the Z axis.
     // Then return it.
-
+    float cosr = cos(rotation_angle*MY_PI/180);
+    float sinr = sin(rotation_angle*MY_PI/180);
+    model << cosr, sinr, 0, 0,
+            -sinr, cosr, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1;
     return model;
 }
 
@@ -41,7 +48,20 @@ Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio,
     // Create the projection matrix for the given parameters.
     // Then return it.
 
-    return projection;
+    Eigen::Matrix4f Mp2o; //透视转正交
+    Mp2o << zNear, 0, 0, 0,
+            0, zNear, 0, 0,
+            0, 0, zNear+zFar, -zNear*zFar,
+            0, 0, 1, 0;
+    float t = tan((eye_fov/2) * MY_PI / 180) * abs(zNear);
+    float height = 2*t;
+    float width = height * aspect_ratio;
+    Eigen::Matrix4f Mo; //缩放成[-1,1]^3的立方体（这里不用平移）
+    Mo   << 2/width, 0, 0, 0,
+            0, 2/height, 0, 0,
+            0, 0, 2/(zNear-zFar), 0,
+            0, 0, 0, 1;
+    return Mo*Mp2o*projection;
 }
 
 int main(int argc, const char** argv)
@@ -77,7 +97,7 @@ int main(int argc, const char** argv)
 
         r.set_model(get_model_matrix(angle));
         r.set_view(get_view_matrix(eye_pos));
-        r.set_projection(get_projection_matrix(45, 1, 0.1, 50));
+        r.set_projection(get_projection_matrix(45, 1, -0.1, -50));
 
         r.draw(pos_id, ind_id, rst::Primitive::Triangle);
         cv::Mat image(700, 700, CV_32FC3, r.frame_buffer().data());
