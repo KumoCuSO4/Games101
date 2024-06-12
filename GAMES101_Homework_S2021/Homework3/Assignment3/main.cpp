@@ -50,7 +50,27 @@ Eigen::Matrix4f get_model_matrix(float angle)
 Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio, float zNear, float zFar)
 {
     // TODO: Use the same projection matrix from the previous assignments
+    Eigen::Matrix4f projection = Eigen::Matrix4f::Identity();
 
+    zNear = -zNear;
+    zFar = -zFar;
+
+    Eigen::Matrix4f Mp2o; // 透视转正交
+    Mp2o << zNear, 0, 0, 0,
+        0, zNear, 0, 0,
+        0, 0, zNear + zFar, -zNear * zFar,
+        0, 0, 1, 0;
+    float t = tan((eye_fov / 2) * MY_PI / 180) * abs(zNear);
+    float height = 2 * t;
+    float width = height * aspect_ratio;
+
+    Eigen::Matrix4f Mo; // 缩放成[-1,1]^3的立方体（这里不用平移）
+    Mo << 2 / width, 0, 0, 0,
+        0, 2 / height, 0, 0,
+        0, 0, 2 / (zNear - zFar), 0,
+        0, 0, 0, 1;
+    // std::cout<<Mo*Mp2o*projection<<std::endl;
+    return Mo * Mp2o * projection;
 }
 
 Eigen::Vector3f vertex_shader(const vertex_shader_payload& payload)
@@ -84,7 +104,8 @@ Eigen::Vector3f texture_fragment_shader(const fragment_shader_payload& payload)
     if (payload.texture)
     {
         // TODO: Get the texture value at the texture coordinates of the current fragment
-
+        Eigen::Vector2f uv = payload.tex_coords;
+        return_color = payload.texture->getColor(uv.x(), uv.y());
     }
     Eigen::Vector3f texture_color;
     texture_color << return_color.x(), return_color.y(), return_color.z();
@@ -107,14 +128,13 @@ Eigen::Vector3f texture_fragment_shader(const fragment_shader_payload& payload)
     Eigen::Vector3f normal = payload.normal;
 
     Eigen::Vector3f result_color = {0, 0, 0};
-
-    for (auto& light : lights)
+    result_color = kd;
+    for (auto &light : lights)
     {
         // TODO: For each light source in the code, calculate what the *ambient*, *diffuse*, and *specular* 
         // components are. Then, accumulate that result on the *result_color* object.
 
     }
-
     return result_color * 255.f;
 }
 
@@ -328,7 +348,6 @@ int main(int argc, const char** argv)
         cv::cvtColor(image, image, cv::COLOR_RGB2BGR);
 
         cv::imwrite(filename, image);
-
         return 0;
     }
 
