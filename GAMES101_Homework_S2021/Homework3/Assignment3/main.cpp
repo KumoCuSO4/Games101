@@ -1,5 +1,7 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include <algorithm>
+#include <cmath>
 
 #include "global.hpp"
 #include "rasterizer.hpp"
@@ -128,12 +130,23 @@ Eigen::Vector3f texture_fragment_shader(const fragment_shader_payload& payload)
     Eigen::Vector3f normal = payload.normal;
 
     Eigen::Vector3f result_color = {0, 0, 0};
-    result_color = kd;
     for (auto &light : lights)
     {
         // TODO: For each light source in the code, calculate what the *ambient*, *diffuse*, and *specular* 
         // components are. Then, accumulate that result on the *result_color* object.
+        Eigen::Vector3f l = light.position - point;
+        Eigen::Vector3f v = (eye_pos - point).normalized();
+        float r_square = l.dot(l);
+        l = l.normalized();
+        Eigen::Vector3f ld = kd * (light.intensity.x() / r_square) * std::max((float)0, l.dot(normal));
 
+        Eigen::Vector3f h = (l + v).normalized();
+        Eigen::Vector3f ls = ks * (light.intensity.x() / r_square) * pow(std::max((float)0, h.dot(normal)), p);
+
+        Eigen::Vector3f la = ka * amb_light_intensity.x();
+
+        Eigen::Vector3f L = ld + ls + la;
+        result_color += L;
     }
     return result_color * 255.f;
 }
@@ -162,7 +175,19 @@ Eigen::Vector3f phong_fragment_shader(const fragment_shader_payload& payload)
     {
         // TODO: For each light source in the code, calculate what the *ambient*, *diffuse*, and *specular* 
         // components are. Then, accumulate that result on the *result_color* object.
-        
+        Eigen::Vector3f l = light.position - point;
+        Eigen::Vector3f v = (eye_pos - point).normalized();
+        float r_square = l.dot(l);
+        l = l.normalized();
+        Eigen::Vector3f ld = kd * (light.intensity.x() / r_square) * std::max((float)0, l.dot(normal));
+
+        Eigen::Vector3f h = (l + v).normalized();
+        Eigen::Vector3f ls = ks * (light.intensity.x() / r_square) * pow(std::max((float)0, h.dot(normal)), p);
+
+        Eigen::Vector3f la = ka * amb_light_intensity.x();
+
+        Eigen::Vector3f L = ld + ls + la;
+        result_color += L;
     }
 
     return result_color * 255.f;
