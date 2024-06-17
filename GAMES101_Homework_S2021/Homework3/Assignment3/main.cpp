@@ -216,19 +216,34 @@ Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payl
     Eigen::Vector3f normal = payload.normal;
 
     float kh = 0.2, kn = 0.1;
-    
     // TODO: Implement displacement mapping here
     // Let n = normal = (x, y, z)
-    // Vector t = (x*y/sqrt(x*x+z*z),sqrt(x*x+z*z),z*y/sqrt(x*x+z*z))
-    // Vector b = n cross product t
-    // Matrix TBN = [t b n]
+    // Vector t = (x*y/sqrt(x*x+z*z),sqrt(x*x+z*z),z*y/sqrt(x*x+z*z))  //切线向量 t 是法线向量在 x-z 平面上的投影，经过适当缩放，使其与法线 n 垂直
+    // Vector b = n cross product t  //副法线向量 b 通过 n 和 t 的叉积计算，确保 b 与 n 和 t 垂直。
+    // Matrix TBN = [t b n]  //从切线空间转换到模型空间
     // dU = kh * kn * (h(u+1/w,v)-h(u,v))
-    // dV = kh * kn * (h(u,v+1/h)-h(u,v))
-    // Vector ln = (-dU, -dV, 1)
+    // dV = kh * kn * (h(u,v+1/h)-h(u,v))  //dU 和 dV 表示高度图在 u 和 v 方向上的变化，乘以系数 kh 和 kn 控制扰动的强度。w 和 h 代表高度图在 u 和 v 方向上的采样步长，1/w和1/h代表一像素的距离
+    // Vector ln = (-dU, -dV, 1)  // 局部扰动法线
     // Position p = p + kn * n * h(u,v)
     // Normal n = normalize(TBN * ln)
-
-
+    float u = payload.tex_coords.x();
+    float v = payload.tex_coords.y();
+    Eigen::Vector3f n = normal;
+    float x = n.x(), y = n.y(), z = n.z();
+    Eigen::Vector3f t = {x * y / sqrt(x * x + z * z), sqrt(x * x + z * z), z * y / sqrt(x * x + z * z)};
+    Eigen::Vector3f b = n.cross(t);
+    Eigen::Matrix3f TBN;
+    TBN.col(0) = t;
+    TBN.col(1) = b;
+    TBN.col(2) = n;
+    Texture* tex = payload.texture;
+    float w = tex->width, h = tex->height;
+    float dU = kh * kn * (tex->getColor(u + 1 / w, v) - tex->getColor(u, v)).x();
+    float dV = kh * kn * (tex->getColor(u, v + 1 / h) - tex->getColor(u, v)).x();
+    Eigen::Vector3f ln = {-dU, -dV, 1}; 
+    point = point + kn * n * tex->getColor(u, v).x();
+    normal = (TBN * ln).normalized();
+    
     Eigen::Vector3f result_color = {0, 0, 0};
 
     for (auto& light : lights)
@@ -236,7 +251,19 @@ Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payl
         // TODO: For each light source in the code, calculate what the *ambient*, *diffuse*, and *specular* 
         // components are. Then, accumulate that result on the *result_color* object.
 
+        Eigen::Vector3f l = light.position - point;
+        Eigen::Vector3f v = (eye_pos - point).normalized();
+        float r_square = l.dot(l);
+        l = l.normalized();
+        Eigen::Vector3f ld = kd * (light.intensity.x() / r_square) * std::max((float)0, l.dot(normal));
 
+        Eigen::Vector3f h = (l + v).normalized();
+        Eigen::Vector3f ls = ks * (light.intensity.x() / r_square) * pow(std::max((float)0, h.dot(normal)), p);
+
+        Eigen::Vector3f la = ka * amb_light_intensity.x();
+
+        Eigen::Vector3f L = ld + ls + la;
+        result_color += L;
     }
 
     return result_color * 255.f;
@@ -275,7 +302,22 @@ Eigen::Vector3f bump_fragment_shader(const fragment_shader_payload& payload)
     // dV = kh * kn * (h(u,v+1/h)-h(u,v))
     // Vector ln = (-dU, -dV, 1)
     // Normal n = normalize(TBN * ln)
-
+    float u = payload.tex_coords.x();
+    float v = payload.tex_coords.y();
+    Eigen::Vector3f n = normal;
+    float x = n.x(), y = n.y(), z = n.z();
+    Eigen::Vector3f t = {x * y / sqrt(x * x + z * z), sqrt(x * x + z * z), z * y / sqrt(x * x + z * z)};
+    Eigen::Vector3f b = n.cross(t);
+    Eigen::Matrix3f TBN;
+    TBN.col(0) = t;
+    TBN.col(1) = b;
+    TBN.col(2) = n;
+    Texture *tex = payload.texture;
+    float w = tex->width, h = tex->height;
+    float dU = kh * kn * (tex->getColor(u + 1 / w, v) - tex->getColor(u, v)).x();
+    float dV = kh * kn * (tex->getColor(u, v + 1 / h) - tex->getColor(u, v)).x();
+    Eigen::Vector3f ln = {-dU, -dV, 1};
+    normal = (TBN * ln).normalized();
 
     Eigen::Vector3f result_color = {0, 0, 0};
     result_color = normal;
@@ -347,7 +389,7 @@ int main(int argc, const char** argv)
         }
         else if (argc == 3 && std::string(argv[2]) == "displacement")
         {
-            std::cout << "Rasterizing using the bump shader\n";
+            std::cout << "Rasterizing using the displacement shader\n";
             active_shader = displacement_fragment_shader;
         }
     }
