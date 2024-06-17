@@ -223,7 +223,7 @@ Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payl
     // Matrix TBN = [t b n]  //从切线空间转换到模型空间
     // dU = kh * kn * (h(u+1/w,v)-h(u,v))
     // dV = kh * kn * (h(u,v+1/h)-h(u,v))  //dU 和 dV 表示高度图在 u 和 v 方向上的变化，乘以系数 kh 和 kn 控制扰动的强度。w 和 h 代表高度图在 u 和 v 方向上的采样步长，1/w和1/h代表一像素的距离
-    // Vector ln = (-dU, -dV, 1)  // 局部扰动法线
+    // Vector ln = (-dU, -dV, 1)  // 根据切线算法线
     // Position p = p + kn * n * h(u,v)
     // Normal n = normalize(TBN * ln)
     float u = payload.tex_coords.x();
@@ -238,10 +238,11 @@ Eigen::Vector3f displacement_fragment_shader(const fragment_shader_payload& payl
     TBN.col(2) = n;
     Texture* tex = payload.texture;
     float w = tex->width, h = tex->height;
-    float dU = kh * kn * (tex->getColor(u + 1 / w, v) - tex->getColor(u, v)).x();
-    float dV = kh * kn * (tex->getColor(u, v + 1 / h) - tex->getColor(u, v)).x();
-    Eigen::Vector3f ln = {-dU, -dV, 1}; 
-    point = point + kn * n * tex->getColor(u, v).x();
+    float dU = kh * kn * (tex->getColor(u + 1 / w, v) - tex->getColor(u, v)).norm();
+    float dV = kh * kn * (tex->getColor(u, v + 1 / h) - tex->getColor(u, v)).norm();
+    //std::cout << tex->getColor(u, v) << std::endl;
+    Eigen::Vector3f ln = {-dU, -dV, 1};
+    point = point + kn * n * (tex->getColor(u, v)).norm();
     normal = (TBN * ln).normalized();
     
     Eigen::Vector3f result_color = {0, 0, 0};
